@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Camera, Loader2, ArrowLeft, Plus, X, Check } from "lucide-react"
-import { createReceipt, extractIngredientsFromImage } from "./actions"
+import { storeIngredients, extractIngredientsFromImage } from "./actions"
 import { motion, AnimatePresence } from "framer-motion"
 
 import {
@@ -124,7 +124,7 @@ export default function ScanPage() {
     setIsLoading(true)
     try {
       // Create a receipt with the items and redirect to meal plan
-      const receiptId = await createReceipt(items, people)
+      const receiptId = await storeIngredients(items, 'scan', people)
       router.push(`/meal-plan/${receiptId}`)
     } catch (error) {
       console.error("Error creating meal plan:", error)
@@ -281,15 +281,6 @@ export default function ScanPage() {
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Or paste multiple ingredients</Label>
-                        <Textarea
-                          placeholder="Paste multiple ingredients separated by commas or new lines"
-                          onChange={handleBulkAdd}
-                          className="min-h-[100px] bg-background"
-                        />
                       </div>
 
                       {items.length > 0 && (

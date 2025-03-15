@@ -1,23 +1,32 @@
-"use server"
+"use server";
 
-// In a real app, this would be a database call
-export async function createManualEntry(items: string[], people: number) {
-  // Generate a random ID for demo purposes
-  const entryId = `manual-${Math.random().toString(36).substring(2, 10)}`
+import { Pool } from "pg";
 
-  // In a real app, we would:
-  // 1. Store the items and people count in a database
-  // 2. Associate them with the entryId
-
-  // For demo purposes, we'll store the data in a global variable or cache
-  // This is just a placeholder - in a real app you'd use a database
-  global.manualEntries = global.manualEntries || {}
-  global.manualEntries[entryId] = {
-    items,
-    people,
-    createdAt: new Date(),
+/**
+ * Stores the manual entry ingredients into the database and returns the ID.
+ * @param items List of ingredients to store
+ * @param people Number of people
+ * @returns The ID of the stored ingredients
+ */
+export async function createManualEntry(
+  items: string[],
+  people: number
+): Promise<string> {
+  const pool = new Pool({
+    connectionString: process.env.NEON_DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  });
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      "INSERT INTO public.mealplan (ingredients, type, people) VALUES ($1, $2, $3) RETURNING mealplanid",
+      [JSON.stringify(items), "manual", people]
+    );
+    return result.rows[0].mealplanid;
+  } finally {
+    client.release();
+    pool.end();
   }
-
-  return entryId
 }
-

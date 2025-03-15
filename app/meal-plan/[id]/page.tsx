@@ -13,21 +13,13 @@ export default async function MealPlanPage(props: { params: { id: string } }) {
   const params = await props.params
   const { id } = params
 
-  const mealPlan = await generateMealPlan(id)
+  const mealplanid = id as unknown as number | 1
+
+  const mealPlan = await generateMealPlan(mealplanid)
+  const isManualEntry = mealPlan.type === "manual"
+  const peopleCount = mealPlan.people
   if (!mealPlan || !mealPlan.days) {
     notFound()
-  }
-
-  const isManualEntry = id.startsWith("manual-")
-  let peopleCount = 2
-  // @ts-ignore
-  if (isManualEntry && global.manualEntries && global.manualEntries[id]) {
-      // @ts-ignore
-    peopleCount = global.manualEntries[id].people
-      // @ts-ignore
-  } else if (global.receiptItems && global.receiptItems[id]) {
-      // @ts-ignore
-    peopleCount = global.receiptItems[id].people
   }
 
   const getOffsetDate = (offset: number) => {

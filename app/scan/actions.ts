@@ -1,70 +1,72 @@
 // app/scan/actions.ts
-"use server"
+"use server";
 
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime"
+import {
+  BedrockRuntimeClient,
+  InvokeModelCommand,
+} from "@aws-sdk/client-bedrock-runtime";
+import { Pool } from "pg";
 
 /**
- * Creates a receipt using provided items and people count.
+ * Stores the scanned ingredients into the database and returns the ID.
+ * @param ingredients List of ingredients to store
+ * @returns The ID of the stored ingredients
  */
-export async function createReceipt(items?: string[], peopleCount?: number) {
-  const receiptId = Math.random().toString(36).substring(2, 10)
-  if (items && items.length > 0) {
-      // @ts-ignore
-    global.receiptItems = global.receiptItems || {}
-      // @ts-ignore
-    global.receiptItems[receiptId] = {
-      items,
-      people: peopleCount || 2,
-      createdAt: new Date(),
-    }
+export async function storeIngredients(
+  ingredients: string[],
+  type: "manual" | "scan",
+  people: number
+): Promise<string> {
+  const pool = new Pool({
+    connectionString: process.env.NEON_DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  });
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      "INSERT INTO public.mealplan (ingredients, type, people) VALUES ($1, $2, $3) RETURNING mealplanid",
+      [JSON.stringify(ingredients), type, people]
+    );
+    return result.rows[0].mealplanid;
+  } finally {
+    client.release();
+    pool.end();
   }
-  return receiptId
 }
 
 /**
  * Generates a 3-day meal plan based on stored receipt/manual entry data using AWS Bedrock.
  */
-export async function generateMealPlan(id: string, people = 2) {
-  let ingredientsList: string[] = []
+export async function generateMealPlan(id: number) {
+  const pool = new Pool({
+    connectionString: process.env.NEON_DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  });
+  const client = await pool.connect();
+  let people: number;
+  let ingredientsList: string[] = [];
+  let type = "manual";
 
-  // Use manually entered ingredients if available
-    // @ts-ignore
-  if (id.startsWith("manual-") && global.manualEntries && global.manualEntries[id]) {
-      // @ts-ignore
-    ingredientsList = global.manualEntries[id].items
-      // @ts-ignore
-    people = global.manualEntries[id].people
-  }
-  // Use stored receipt items if available 
-  // @ts-ignore
-  else if (global.receiptItems && global.receiptItems[id]) {
-      // @ts-ignore
-    ingredientsList = global.receiptItems[id].items
-    // @ts-ignore
-    people = global.receiptItems[id].people
-  }
-  // Fallback mock data for demonstration
-  else {
-    ingredientsList = [
-      "Chicken breast 1lb",
-      "Brown rice 2lb bag",
-      "Broccoli 1 bunch",
-      "Bell peppers 3ct",
-      "Onions 3ct",
-      "Eggs 12ct",
-      "Milk 1 gallon",
-      "Bread whole wheat",
-      "Spinach 10oz bag",
-      "Tomatoes 4ct",
-      "Avocados 2ct",
-      "Olive oil 16oz",
-      "Garlic 1 bulb",
-      "Lemons 2ct",
-      "Greek yogurt 32oz",
-      "Cheddar cheese 8oz",
-      "Pasta 16oz",
-      "Ground turkey 1lb",
-    ]
+  try {
+    const result = await client.query(
+      "SELECT ingredients, people FROM public.mealplan WHERE mealplanid = $1",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error(`No meal plan found with ID ${id}`);
+    }
+
+    ingredientsList = result.rows[0].ingredients;
+    people = result.rows[0].people;
+    type = result.rows[0].type;
+  } finally {
+    client.release();
+    pool.end();
   }
 
   // Build the prompt for AWS Bedrock
@@ -101,16 +103,17 @@ Format the response as JSON with the following structure:
 }
 
 ONLY RETURN JSON! DO NOT GIVE ANY OTHER TEXT!!! DO NOT FORMAT OTHER THAN THAT!
-`
+`;
 
   // Create AWS Bedrock client – use environment variables for credentials in production
   const bedrockClient = new BedrockRuntimeClient({
     region: "us-west-2",
     credentials: {
       accessKeyId: process.env.AWS_ACCESS_KEY_ID || "YOUR_ACCESS_KEY_ID",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "YOUR_SECRET_ACCESS_KEY",
+      secretAccessKey:
+        process.env.AWS_SECRET_ACCESS_KEY || "YOUR_SECRET_ACCESS_KEY",
     },
-  })
+  });
 
   // Prepare the request body for Bedrock
   const requestBody = {
@@ -131,46 +134,48 @@ ONLY RETURN JSON! DO NOT GIVE ANY OTHER TEXT!!! DO NOT FORMAT OTHER THAN THAT!
         ],
       },
     ],
-  }
+  };
 
   try {
     // Create and send the Bedrock command
     const command = new InvokeModelCommand({
       modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0",
       body: JSON.stringify(requestBody),
-    })
-    const response = await bedrockClient.send(command)
-    
+    });
+    const response = await bedrockClient.send(command);
+
     // Decode and parse the response
-    const rawResponse = new TextDecoder().decode(response.body)
-    const responseBody = JSON.parse(rawResponse)
-    const text = responseBody.content[0].text
+    const rawResponse = new TextDecoder().decode(response.body);
+    const responseBody = JSON.parse(rawResponse);
+    const text = responseBody.content[0].text;
     if (!text) {
-      throw new Error("No text returned from AWS Bedrock API")
+      throw new Error("No text returned from AWS Bedrock API");
     }
-    
+
     // Remove any markdown formatting if present
     const cleanedText = text
       .replace(/^```(?:json)?\n/, "")
       .replace(/\n```$/, "")
-      .trim()
+      .trim();
 
     try {
-      const mealPlan = JSON.parse(cleanedText)
-      return mealPlan  
+      const mealPlan = JSON.parse(cleanedText);
+      mealPlan.type = type;
+      mealPlan.people = people;
+      return mealPlan;
     } catch (error) {
-      console.error({ error, text: cleanedText })
-      throw new Error("Failed to parse meal plan JSON")
+      console.error({ error, text: cleanedText });
+      throw new Error("Failed to parse meal plan JSON");
     }
   } catch (error) {
-    console.error("Error calling AWS Bedrock API:", error)
-    throw new Error("Failed to generate meal plan")
+    console.error("Error calling AWS Bedrock API:", error);
+    throw new Error("Failed to generate meal plan");
   }
 }
 
 import {
   TextractClient,
-  DetectDocumentTextCommand
+  DetectDocumentTextCommand,
 } from "@aws-sdk/client-textract";
 
 /**
@@ -178,39 +183,44 @@ import {
  * @param file File to process
  * @returns A list of food ingredients extracted from the image
  */
-export async function extractIngredientsFromImage(file: File): Promise<string[]> {
+export async function extractIngredientsFromImage(
+  file: File
+): Promise<string[]> {
   const credentials = {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || "YOUR_ACCESS_KEY_ID",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "YOUR_SECRET_ACCESS_KEY",
+    secretAccessKey:
+      process.env.AWS_SECRET_ACCESS_KEY || "YOUR_SECRET_ACCESS_KEY",
   };
 
   const textractClient = new TextractClient({
     region: "us-west-2",
-    credentials
+    credentials,
   });
 
   const arrayBuffer = await file.arrayBuffer();
   const documentBytes = new Uint8Array(arrayBuffer);
 
   const textractCommand = new DetectDocumentTextCommand({
-    Document: { Bytes: documentBytes }
+    Document: { Bytes: documentBytes },
   });
 
   const textractResponse = await textractClient.send(textractCommand);
 
-  let fullText = '';
+  let fullText = "";
   textractResponse.Blocks?.forEach((item) => {
     if (item.BlockType === "LINE" && item.Text) {
-      fullText += item.Text + '\n';
+      fullText += item.Text + "\n";
     }
   });
 
   const bedrockClient = new BedrockRuntimeClient({
     region: "us-west-2",
-    credentials
+    credentials,
   });
 
-  const prompt = "Get me all the ingredients of EDIBLE food items from a list of strings. If an item is not in english or abbreviated, give the full name in english. JUST RETURN THE ITEM NAME IN ENGLISH AND QUANTITIES IF APPLICABLE WITHOUT ANY ADDITIONAL INTERPRETATION. The list: " + fullText;
+  const prompt =
+    "Get me all the ingredients of EDIBLE food items from a list of strings. If an item is not in english or abbreviated, give the full name in english. JUST RETURN THE ITEM NAME IN ENGLISH AND QUANTITIES IF APPLICABLE WITHOUT ANY ADDITIONAL INTERPRETATION. The list: " +
+    fullText;
 
   const requestBody = {
     anthropic_version: "bedrock-2023-05-31",
@@ -225,24 +235,30 @@ export async function extractIngredientsFromImage(file: File): Promise<string[]>
         content: [
           {
             type: "text",
-            text: prompt
-          }
-        ]
-      }
-    ]
+            text: prompt,
+          },
+        ],
+      },
+    ],
   };
 
   const bedrockCommand = new InvokeModelCommand({
     modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify(requestBody),
   });
 
   const claudeResponse = await bedrockClient.send(bedrockCommand);
 
-  const responseBody = JSON.parse(new TextDecoder().decode(claudeResponse.body));
+  const responseBody = JSON.parse(
+    new TextDecoder().decode(claudeResponse.body)
+  );
   const ingredientsList = responseBody.content[0].text;
 
   console.log(ingredientsList);
 
-  return ingredientsList.split('\n').filter((line: string) => line.trim() !== '');
+  const toReturn = ingredientsList
+    .split("\n")
+    .filter((line: string) => line.trim() !== "");
+
+  return toReturn;
 }
