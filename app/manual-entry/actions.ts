@@ -27,6 +27,5 @@ export async function createManualEntry(
     return result.rows[0].mealplanid;
   } finally {
     client.release();
-    pool.end();
   }
 }

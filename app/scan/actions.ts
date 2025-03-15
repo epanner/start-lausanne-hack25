@@ -32,7 +32,6 @@ export async function storeIngredients(
     return result.rows[0].mealplanid;
   } finally {
     client.release();
-    pool.end();
   }
 }
 
@@ -66,7 +65,6 @@ export async function generateMealPlan(id: number) {
     type = result.rows[0].type;
   } finally {
     client.release();
-    pool.end();
   }
 
   // Build the prompt for AWS Bedrock
