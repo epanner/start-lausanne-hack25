@@ -20,11 +20,28 @@ export default async function MealPlanPage(props: { params: { id: string } }) {
 
   const isManualEntry = id.startsWith("manual-")
   let peopleCount = 2
+  // @ts-ignore
   if (isManualEntry && global.manualEntries && global.manualEntries[id]) {
+      // @ts-ignore
     peopleCount = global.manualEntries[id].people
+      // @ts-ignore
   } else if (global.receiptItems && global.receiptItems[id]) {
+      // @ts-ignore
     peopleCount = global.receiptItems[id].people
   }
+
+  const getOffsetDate = (offset: number) => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const now = new Date();
+    now.setDate(now.getDate() + offset);  // Apply the offset
+
+    const dayName = days[now.getDay()];
+    const day = String(now.getDate()).padStart(2, '0');  // Two-digit format
+    const month = String(now.getMonth() + 1).padStart(2, '0'); // Two-digit month
+
+    return `${dayName}, ${day}.${month}.`
+};
+
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
@@ -43,7 +60,7 @@ export default async function MealPlanPage(props: { params: { id: string } }) {
             <h1 className="text-4xl font-bold tracking-tight">Your Meal Plan</h1>
             <p className="text-muted-foreground">
               Based on your {isManualEntry ? "manually entered ingredients" : "grocery receipt"} from{" "}
-              {new Date().toLocaleDateString()}
+              {getOffsetDate(0)}
             </p>
           </div>
 
@@ -100,12 +117,20 @@ export default async function MealPlanPage(props: { params: { id: string } }) {
             </CardHeader>
             <CardContent>
               <Tabs defaultValue={mealPlan.days[0].day.toLowerCase().replace(" ", "-")}>
-                <TabsList className="mb-6 w-full justify-start overflow-x-auto">
-                  {mealPlan.days.map((day: any) => (
-                    <TabsTrigger key={day.day} value={day.day.toLowerCase().replace(" ", "-")} className="min-w-[80px]">
-                      {day.day}
-                    </TabsTrigger>
-                  ))}
+              <TabsList className="mb-6 w-full justify-start overflow-x-auto">
+                    {mealPlan.days.map((day: any, index: number) => {
+                      const date = new Date();
+                      date.setDate(date.getDate() + index);
+                      return (
+                        <TabsTrigger
+                          key={day.day}
+                          value={day.day.toLowerCase().replace(" ", "-")}
+                          className="min-w-[80px]"
+                        >
+                          {getOffsetDate(index)}
+                        </TabsTrigger>
+                      );
+                    })}
                 </TabsList>
 
                 <Suspense fallback={<MealPlanSkeleton />}>
