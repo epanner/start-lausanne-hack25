@@ -49,7 +49,7 @@ export async function generateMealPlan(id: number) {
 
   try {
     const result = await client.query(
-      "SELECT ingredients, people FROM public.mealplan WHERE mealplanid = $1",
+      "SELECT ingredients, people, type FROM public.mealplan WHERE mealplanid = $1",
       [id]
     );
 
