@@ -2,6 +2,13 @@
 
 import { Pool } from "pg";
 
+const pool = new Pool({
+  connectionString: process.env.NEON_DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
+
 /**
  * Stores the manual entry ingredients into the database and returns the ID.
  * @param items List of ingredients to store
@@ -12,12 +19,6 @@ export async function createManualEntry(
   items: string[],
   people: number
 ): Promise<string> {
-  const pool = new Pool({
-    connectionString: process.env.NEON_DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  });
   const client = await pool.connect();
   try {
     const result = await client.query(

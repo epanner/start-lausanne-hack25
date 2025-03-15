@@ -7,6 +7,13 @@ import {
 } from "@aws-sdk/client-bedrock-runtime";
 import { Pool } from "pg";
 
+const pool = new Pool({
+  connectionString: process.env.NEON_DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
+
 /**
  * Stores the scanned ingredients into the database and returns the ID.
  * @param ingredients List of ingredients to store
@@ -17,12 +24,7 @@ export async function storeIngredients(
   type: "manual" | "scan",
   people: number
 ): Promise<string> {
-  const pool = new Pool({
-    connectionString: process.env.NEON_DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  });
+
   const client = await pool.connect();
   try {
     const result = await client.query(
@@ -39,12 +41,7 @@ export async function storeIngredients(
  * Generates a 3-day meal plan based on stored receipt/manual entry data using AWS Bedrock.
  */
 export async function generateMealPlan(id: number) {
-  const pool = new Pool({
-    connectionString: process.env.NEON_DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  });
+
   const client = await pool.connect();
   let people: number;
   let ingredientsList: string[] = [];
