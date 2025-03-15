@@ -61,7 +61,7 @@ export async function generateMealPlan(id: number) {
     ingredientsList = result.rows[0].ingredients;
     people = result.rows[0].people;
     type = result.rows[0].type;
-    if (result.rows[0].mealplan) {
+    if (result.rows[0].mealplan.days) {
       toReturn = result.rows[0].mealplan
       toReturn.type = type;
       toReturn.people = people;

@@ -113,21 +113,19 @@ export default async function MealPlanPage(props: { params: { id: string } }) {
             </CardHeader>
             <CardContent>
               <Tabs defaultValue={mealPlan.days[0].day.toLowerCase().replace(" ", "-")}>
-              <TabsList className="mb-6 w-full justify-start overflow-x-auto">
-                    {mealPlan.days.map((day: any, index: number) => {
-                      const date = new Date();
-                      date.setDate(date.getDate() + index);
-                      return (
-                        <TabsTrigger
-                          key={day.day}
-                          value={day.day.toLowerCase().replace(" ", "-")}
-                          className="min-w-[80px]"
-                        >
-                          {getOffsetDate(index)}
-                        </TabsTrigger>
-                      );
-                    })}
-                </TabsList>
+              <TabsList className="mb-6 w-full justify-start overflow-x-auto whitespace-nowrap">
+                {mealPlan.days.map((day: any, index: number) => {
+                  return (
+                    <TabsTrigger
+                      key={day.day}
+                      value={day.day.toLowerCase().replace(" ", "-")}
+                      className="flex-shrink-0 min-w-[60px] sm:min-w-[80px] text-center truncate whitespace-nowrap text-sm sm:text-base px-2"
+                    >
+                      {getOffsetDate(index)}
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
 
                 <Suspense fallback={<MealPlanSkeleton />}>
                   {mealPlan.days.map((day: any) => (
