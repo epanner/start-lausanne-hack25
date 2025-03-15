@@ -179,8 +179,6 @@ ONLY RETURN JSON! DO NOT GIVE ANY OTHER TEXT!!! DO NOT FORMAT OTHER THAN THAT!
   } catch (error) {
     console.error("Error calling AWS Bedrock API:", error);
     throw new Error("Failed to generate meal plan");
-  } finally {
-    client.release();
   }
 }
 
