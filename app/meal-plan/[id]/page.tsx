@@ -10,12 +10,16 @@ import MealPlanSkeleton from "./loading"
 
 export default async function MealPlanPage(props: { params: { id: string } }) {
   // Await the params before destructuring
-  const params = await props.params
-  const { id } = params
+  const { id } = await props.params;
 
-  const mealplanid = id as unknown as number | 1
+  let mealPlan;
+  try {
+    mealPlan = await generateMealPlan(parseInt(id, 10));
+  } catch (error) {
+    console.error("Error generating meal plan:", error);
+    return <div>Error generating meal plan. Please try again later.</div>;
+  }
 
-  const mealPlan = await generateMealPlan(mealplanid)
   const isManualEntry = mealPlan.type === "manual"
   const peopleCount = mealPlan.people
   if (!mealPlan || !mealPlan.days) {
