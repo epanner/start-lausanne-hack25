@@ -46,10 +46,11 @@ export async function generateMealPlan(id: number) {
   let people: number;
   let ingredientsList: string[] = [];
   let type = "manual";
+  let toReturn = null;
 
   try {
     const result = await client.query(
-      "SELECT ingredients, people, type FROM public.mealplan WHERE mealplanid = $1",
+      "SELECT ingredients, people, type, mealplan FROM public.mealplan WHERE mealplanid = $1",
       [id]
     );
 
@@ -60,8 +61,16 @@ export async function generateMealPlan(id: number) {
     ingredientsList = result.rows[0].ingredients;
     people = result.rows[0].people;
     type = result.rows[0].type;
+    if (result.rows[0].mealplan) {
+      toReturn = result.rows[0].mealplan
+      toReturn.type = type;
+      toReturn.people = people;
+    }
   } finally {
     client.release();
+    if (toReturn) {
+      return toReturn
+    }
   }
 
   // Build the prompt for AWS Bedrock
@@ -155,6 +164,11 @@ ONLY RETURN JSON! DO NOT GIVE ANY OTHER TEXT!!! DO NOT FORMAT OTHER THAN THAT!
 
     try {
       const mealPlan = JSON.parse(cleanedText);
+      const client = await pool.connect();
+      await client.query(
+        "UPDATE public.mealplan SET mealplan = $1 WHERE mealplanid = $2",
+        [mealPlan, id]
+      );
       mealPlan.type = type;
       mealPlan.people = people;
       return mealPlan;
@@ -165,6 +179,8 @@ ONLY RETURN JSON! DO NOT GIVE ANY OTHER TEXT!!! DO NOT FORMAT OTHER THAN THAT!
   } catch (error) {
     console.error("Error calling AWS Bedrock API:", error);
     throw new Error("Failed to generate meal plan");
+  } finally {
+    client.release();
   }
 }
 
