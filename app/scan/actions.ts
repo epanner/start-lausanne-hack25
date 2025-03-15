@@ -167,3 +167,82 @@ ONLY RETURN JSON! DO NOT GIVE ANY OTHER TEXT!!! DO NOT FORMAT OTHER THAN THAT!
     throw new Error("Failed to generate meal plan")
   }
 }
+
+import {
+  TextractClient,
+  DetectDocumentTextCommand
+} from "@aws-sdk/client-textract";
+
+/**
+ * Extracts text from an image using AWS Textract and processes it with Claude to identify food ingredients
+ * @param file File to process
+ * @returns A list of food ingredients extracted from the image
+ */
+export async function extractIngredientsFromImage(file: File): Promise<string[]> {
+  const credentials = {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "YOUR_ACCESS_KEY_ID",
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "YOUR_SECRET_ACCESS_KEY",
+  };
+
+  const textractClient = new TextractClient({
+    region: "us-west-2",
+    credentials
+  });
+
+  const arrayBuffer = await file.arrayBuffer();
+  const documentBytes = new Uint8Array(arrayBuffer);
+
+  const textractCommand = new DetectDocumentTextCommand({
+    Document: { Bytes: documentBytes }
+  });
+
+  const textractResponse = await textractClient.send(textractCommand);
+
+  let fullText = '';
+  textractResponse.Blocks?.forEach((item) => {
+    if (item.BlockType === "LINE" && item.Text) {
+      fullText += item.Text + '\n';
+    }
+  });
+
+  const bedrockClient = new BedrockRuntimeClient({
+    region: "us-west-2",
+    credentials
+  });
+
+  const prompt = "Get me all the ingredients of EDIBLE food items from a list of strings. If an item is not in english or abbreviated, give the full name in english. JUST RETURN THE ITEM NAME IN ENGLISH AND QUANTITIES IF APPLICABLE WITHOUT ANY ADDITIONAL INTERPRETATION. The list: " + fullText;
+
+  const requestBody = {
+    anthropic_version: "bedrock-2023-05-31",
+    max_tokens: 5000,
+    top_k: 250,
+    stop_sequences: [],
+    temperature: 1,
+    top_p: 0.999,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: prompt
+          }
+        ]
+      }
+    ]
+  };
+
+  const bedrockCommand = new InvokeModelCommand({
+    modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    body: JSON.stringify(requestBody)
+  });
+
+  const claudeResponse = await bedrockClient.send(bedrockCommand);
+
+  const responseBody = JSON.parse(new TextDecoder().decode(claudeResponse.body));
+  const ingredientsList = responseBody.content[0].text;
+
+  console.log(ingredientsList);
+
+  return ingredientsList.split('\n').filter((line: string) => line.trim() !== '');
+}
